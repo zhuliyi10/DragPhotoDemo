@@ -9,6 +9,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -21,12 +22,13 @@ import androidx.annotation.Nullable;
  */
 public class PhotoViewPage extends FrameLayout {
     private static final String TAG = PhotoViewPage.class.getSimpleName();
-
+    private boolean mIsIntercept=false;
     private float mDownX;
     private float mDownY;
     private float MAX_TRAN_Y;
     private Rect mSrcRect;
     private Rect mDestRect;
+    private int mTouchSlop;
 
     public PhotoViewPage(@NonNull Context context) {
         this(context, null);
@@ -43,20 +45,50 @@ public class PhotoViewPage extends FrameLayout {
 
     private void init(Context context) {
         LayoutInflater.from(context).inflate(R.layout.page_photo_view, this);
-
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mDownX = ev.getRawX();
                 mDownY = ev.getRawY();
-                return true;
+                mIsIntercept=false;
+                Log.d(TAG, "onInterceptTouchEvent: ACTION_DOWN");
+                break;
+
             case MotionEvent.ACTION_MOVE:
-                if (ev.getPointerCount() == 1) {
-                    float tranY = ev.getRawY() - mDownY;
-                    float tranX = ev.getRawX() - mDownX;
+                float tranY = ev.getRawY() - mDownY;
+                float tranX = ev.getRawX() - mDownX;
+                double distance = Math.sqrt(tranY * tranY + tranX * tranX);
+                if (ev.getPointerCount() == 1 && distance > mTouchSlop) {
+                    mIsIntercept=true;
+                }
+                Log.d(TAG, "onInterceptTouchEvent: ACTION_MOVE");
+                break;
+            case MotionEvent.ACTION_UP:
+                mIsIntercept=false;
+                Log.d(TAG, "onInterceptTouchEvent: ACTION_UP");
+                break;
+
+        }
+        return  mIsIntercept;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent ev) {
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                Log.d(TAG, "onTouchEvent: ACTION_DOWN");
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                Log.d(TAG, "onTouchEvent: ACTION_MOVE");
+                float tranY = ev.getRawY() - mDownY;
+                float tranX = ev.getRawX() - mDownX;
+                double distance = Math.sqrt(tranY * tranY + tranX * tranX);
+                if (ev.getPointerCount() == 1 && distance > mTouchSlop) {
                     setTranslationX(tranX);
                     setTranslationY(tranY);
                     if (tranY > 0 && tranY < MAX_TRAN_Y) {
@@ -65,14 +97,16 @@ public class PhotoViewPage extends FrameLayout {
                         setScaleX(scale);
                         setScaleY(scale);
                     }
+                    return true;
                 }
                 break;
             case MotionEvent.ACTION_UP:
+                Log.d(TAG, "onTouchEvent: ACTION_UP");
                 onActionUp();
                 break;
 
         }
-        return super.dispatchTouchEvent(ev);
+        return super.onTouchEvent(ev);
     }
 
     /**
@@ -82,12 +116,13 @@ public class PhotoViewPage extends FrameLayout {
      */
     public void showPhotoView(Rect srcRect) {
         mSrcRect = srcRect;
-        setVisibility(View.VISIBLE);
+        setVisibility(View.INVISIBLE);//预防立即出现当前
         setTranslationX(0);
         setTranslationY(0);
         setScaleX(1);
         setScaleY(1);
         post(() -> {
+            setVisibility(View.VISIBLE);
             MAX_TRAN_Y = getHeight();
             int[] location = new int[2];
             getLocationOnScreen(location);
